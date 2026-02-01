@@ -25,8 +25,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Копіюємо весь код проекту
 COPY . .
 
-# Створюємо користувача (HF Spaces вимагає root-less запуску для безпеки)
-RUN useradd -m -u 1000 user
+# Створюємо користувача та налаштовуємо права доступу
+RUN useradd -m -u 1000 user && \
+    mkdir -p output cache/grids && \
+    chown -R user:user /app
+
 USER user
 ENV HOME=/home/user \
     PATH=/home/user/.local/bin:$PATH

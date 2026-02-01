@@ -55,9 +55,13 @@ tasks: dict[str, GenerationTask] = {}
 # Зберігання зв'язків між множинними задачами (task_id -> list of task_ids)
 multiple_tasks_map: dict[str, list[str]] = {}
 
-# Директорія для збереження згенерованих файлів
-OUTPUT_DIR = Path("output")
-OUTPUT_DIR.mkdir(exist_ok=True)
+import tempfile
+
+# Використовуємо системну тимчасову директорію для хмарних середовищ (Hugging Face / Render)
+# Це вирішує проблему прав доступу і не засмічує диск
+OUTPUT_DIR = Path(tempfile.gettempdir()) / "3dmap_output"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
 
 from fastapi.staticfiles import StaticFiles
 # Mount output folder as static files
@@ -2194,6 +2198,17 @@ async def generate_model_task(
 
             if task.firebase_url:
                 task.message = "Модель та шари готові та завантажені в Firebase!"
+                
+                # CLEANUP: Видаляємо локальні файли після успішного завантаження
+                # Це важливо для Hugging Face / Render, де мало місця
+                try:
+                    for f_path in [output_file_abs] + [Path(p) for p in task.output_files.values() if p]:
+                        if f_path.exists():
+                            f_path.unlink()
+                    print("[INFO] Cleanup: Local temp files deleted.")
+                except Exception as cleanup_err:
+                    print(f"[WARN] Cleanup failed: {cleanup_err}")
+
             else:
                  print("[INFO] Firebase upload skipped (not configured or failed).")
         except Exception as fb_err:
