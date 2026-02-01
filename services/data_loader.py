@@ -507,7 +507,11 @@ def fetch_city_data(
                 # Проекція в метричну систему
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", DeprecationWarning)
-                    gdf_w = ox.project_gdf(gdf_w)
+                    try:
+                        gdf_w = ox.project_gdf(gdf_w)
+                    except AttributeError:
+                        # OSMnx v2.0+
+                        gdf_w = ox.projection.project_gdf(gdf_w)
                 return gdf_w
         except InsufficientResponseError:
             return gpd.GeoDataFrame()
@@ -534,7 +538,11 @@ def fetch_city_data(
             # Проекція графа
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", DeprecationWarning)
-                G = ox.project_graph(G)
+                try:
+                    G = ox.project_graph(G)
+                except AttributeError:
+                    # OSMnx v2.0+
+                    G = ox.projection.project_graph(G)
             return G
         except Exception as e:
             print(f"[ERROR] Помилка завантаження доріг: {e}")

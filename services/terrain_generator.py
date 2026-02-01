@@ -351,7 +351,16 @@ def create_terrain_mesh(
     mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
     
     if len(mesh.faces) > 0:
-        mesh.remove_degenerate_faces()
+        # Fix for Trimesh > 4.0: remove_degenerate_faces is deprecated/removed
+        try:
+            if hasattr(mesh, "remove_degenerate_faces"):
+                mesh.remove_degenerate_faces()
+            else:
+                # Modern way: use boolean mask property
+                mesh.update_faces(mesh.nondegenerate_faces)
+        except Exception as e:
+            print(f"[WARN] Mesh cleanup failed: {e}")
+
         try:
             mesh.fix_normals()
         except: pass
