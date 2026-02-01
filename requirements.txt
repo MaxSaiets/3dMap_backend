@@ -1,8 +1,8 @@
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-python-multipart==0.0.6
-pydantic==2.5.3
-osmnx==1.7.0
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+pydantic>=2.5.3
+osmnx>=1.7.0
 geopandas>=0.14.1
 shapely>=2.0.2
 trimesh>=4.0.5
