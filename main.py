@@ -1088,7 +1088,7 @@ async def generate_zones_endpoint(request: ZoneGenerationRequest, background_tas
     )
 
 
-async def generate_model_task(
+def generate_model_task(
     task_id: str,
     request: GenerationRequest,
     zone_id: Optional[str] = None,
@@ -1250,15 +1250,48 @@ async def generate_model_task(
         # ВАЖЛИВО: Для доріг використовуємо padding, щоб отримати повні мости з сусідніх зон
         print(f"[DEBUG] Завантаження даних для зони: north={request.north}, south={request.south}, east={request.east}, west={request.west}")
         
-        # Padding для доріг (0.01° ≈ 1км) для детекції мостів
-        road_padding = 0.01
-        gdf_buildings, gdf_water, G_roads = fetch_city_data(
-            request.north + road_padding, 
-            request.south - road_padding, 
-            request.east + road_padding, 
-            request.west - road_padding,
-            padding=0.005  # Increased padding to match 3dMap (larger context)
-        )
+        # Parallelize data fetching: City Data (Buildings, Water, Roads) + Extras (Parks)
+        print(f"[DEBUG] Starting parallel data fetch for zone...")
+        
+        import concurrent.futures
+        
+        # Helper wrappers
+        def _get_city_data():
+            # Apply manually calculated padding for roads bridge context
+            road_padding = 0.01
+            return fetch_city_data(
+                request.north + road_padding, 
+                request.south - road_padding, 
+                request.east + road_padding, 
+                request.west - road_padding,
+                padding=0.005
+            )
+
+        def _get_extras():
+            # Extras only need zone bounds (no extra padding usually, but consistent with old logic)
+            return fetch_extras(request.north, request.south, request.east, request.west)
+
+        gdf_buildings = gpd.GeoDataFrame()
+        gdf_water = gpd.GeoDataFrame()
+        G_roads = None
+        gdf_green = gpd.GeoDataFrame()
+
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                future_city = executor.submit(_get_city_data)
+                future_extras = executor.submit(_get_extras)
+                
+                gdf_buildings, gdf_water, G_roads = future_city.result()
+                gdf_green = future_extras.result()
+        except Exception as e:
+            print(f"[WARN] Parallel fetch failed: {e}")
+            # Fallback to serial
+            try:
+                gdf_buildings, gdf_water, G_roads = _get_city_data()
+            except: pass
+            try:
+                gdf_green = _get_extras()
+            except: pass
         
         # Логування завантажених даних
         num_buildings = len(gdf_buildings) if gdf_buildings is not None and not gdf_buildings.empty else 0
@@ -1803,8 +1836,7 @@ async def generate_model_task(
         parks_mesh = None
         poi_mesh = None # POI processing REMOVED per user request
         try:
-            # Extras також завантажуємо тільки для цієї зони (без padding)
-            gdf_green = fetch_extras(request.north, request.south, request.east, request.west)
+            # Extras (gdf_green) is already loaded in parallel block above
             if scale_factor and scale_factor > 0 and terrain_provider is not None:
                 if request.include_parks and gdf_green is not None and not gdf_green.empty:
                     # ВАЖЛИВО: gdf_green приходить в UTM (метри), але terrain_provider + вся сцена вже в локальних координатах.
