@@ -13,6 +13,8 @@ import os
 import uuid
 from pathlib import Path
 import trimesh
+import gc
+
 
 # Придушення deprecation warnings від pandas/geopandas
 warnings.filterwarnings('ignore', category=DeprecationWarning, module='pandas')
@@ -2158,6 +2160,11 @@ async def generate_model_task(
         
         # 8. Завантаження в Firebase (головний файл + всі шари для прев'ю)
         try:
+            # MEMORY OPTIMIZATION: Clear large objects before upload
+            # Force garbage collection to free up memory from generation steps
+            print("[INFO] Running garbage collection before upload...")
+            gc.collect()
+
             print("[INFO] Start uploading all files to Firebase...")
             
             # Завантажуємо головний файл
