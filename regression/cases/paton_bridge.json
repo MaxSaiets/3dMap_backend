@@ -1,0 +1,41 @@
+{
+  "name": "paton_bridge",
+  "note": "Цей кейс відтворює твою зону через локальні X/Y ranges (з логів) + приблизний центр (міст Патона). Якщо треба 1:1, можна замінити на request.north/south/east/west.",
+  "center_latlon": { "lat": 50.4265, "lon": 30.5865 },
+  "local_bbox_m": { "x_min": -1475.69, "x_max": 1475.69, "y_min": -951.0, "y_max": 951.0 },
+  "request": {
+    "model_size_mm": 100.0,
+    "export_format": "3mf",
+    "terrain_enabled": true,
+    "terrain_resolution": 350,
+    "terrarium_zoom": 15,
+    "terrain_smoothing_sigma": 2.0,
+    "terrain_z_scale": 3.0,
+    "max_terrain_relief_mm": 12.0,
+    "water_depth": 2.0,
+    "bridge_clearance_mm": 2.0,
+    "include_parks": true,
+    "include_pois": false,
+    "context_padding_m": 600.0
+  },
+  "expected_local_bbox_m": {
+    "x_min": -1475.69,
+    "x_max": 1475.69,
+    "y_min": -951.0,
+    "y_max": 951.0,
+    "tolerance_m": 50.0
+  },
+  "assertions": {
+    "min_terrain_relief_mm": 2.0,
+    "min_water_surface_separation_mm": 0.05,
+    "min_parks_top_clearance_mm": 0.2,
+    "min_roads_top_clearance_mm": 0.1,
+    "min_bridge_clearance_mm": 2.0
+  },
+  "artifacts": {
+    "export_scene": true,
+    "export_preview_parts_stl": false
+  }
+}
+
+
