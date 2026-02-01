@@ -8,6 +8,8 @@ WORKDIR /app
 # libgl1-mesa-glx потрібен для графічних операцій
 # libgomp1 потрібен для OpenMP (паралельні обчислення)
 RUN apt-get update && apt-get install -y \
+    build-essential \
+    python3-dev \
     libgl1 \
     libgomp1 \
     libglib2.0-0 \
