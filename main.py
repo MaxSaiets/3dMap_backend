@@ -66,9 +66,9 @@ multiple_tasks_map: dict[str, list[str]] = {}
 
 import tempfile
 
-# Використовуємо системну тимчасову директорію для хмарних середовищ (Hugging Face / Render)
-# Це вирішує проблему прав доступу і не засмічує диск
-OUTPUT_DIR = Path(tempfile.gettempdir()) / "3dmap_output"
+# Використовуємо локальну директорію output для стабільності
+# Це вирішує проблему зникнення файлів у тимчасових папках
+OUTPUT_DIR = Path("output").resolve()
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -355,55 +355,81 @@ async def download_model(
     part: Optional[str] = Query(default=None, description="Optional preview part: base|roads|buildings|water"),
 ):
     """
-    Завантажує згенерований файл
+    Завантажує згенерований файл (локально або редирект на Firebase)
     """
     if task_id not in tasks:
         raise HTTPException(status_code=404, detail="Task not found")
     
     task = tasks[task_id]
-    if task.status != "completed" or not task.output_file:
+    if task.status != "completed":
         raise HTTPException(status_code=400, detail="Model not ready")
     
     print(f"[DEBUG] Download request: task={task_id}, format={format}, part={part}")
     
-    # Якщо запитали конкретний формат/частину — пробуємо віддати її (якщо існує)
-    selected_path: Optional[str] = None
+    # 1. Визначаємо ключ потрібного файлу (key for output_files / firebase_outputs)
+    target_key = None
     if format or part:
         fmt = (format or "stl").lower().strip(".")
         if part:
             p = part.lower()
-            key = f"{p}_{fmt}"
-            selected_path = getattr(task, "output_files", {}).get(key)
-            if not selected_path:
-                print(f"[WARN] Part not found in task output_files: {key}")
-                # КРИТИЧНО: Для POI не викидаємо помилку, а повертаємо 404 з детальним повідомленням
-                # Фронтенд вже обробляє 404 для POI і продовжує завантаження інших частин
-                if p == "poi":
-                    print(f"[INFO] POI part not available (це нормально, якщо POI не були згенеровані), повертаємо 404")
-                raise HTTPException(status_code=404, detail=f"Requested part not available: {p} ({fmt})")
+            target_key = f"{p}_{fmt}" # e.g. "roads_stl"
         else:
-            selected_path = getattr(task, "output_files", {}).get(fmt)
-            if not selected_path:
-                print(f"[WARN] Format not found in task output_files: {fmt}")
-                raise HTTPException(status_code=404, detail=f"Requested format not available: {fmt}")
+            target_key = fmt # e.g. "3mf" or "stl"
     else:
-        selected_path = task.output_file
-
-    # Перевіряємо існування файлу (з абсолютним шляхом)
-    file_path = Path(selected_path)
-    print(f"[DEBUG] Resolved path: {file_path}")
-    if not file_path.exists():
-        # Спробуємо знайти файл відносно OUTPUT_DIR
-        alt_path = OUTPUT_DIR / file_path.name
-        if alt_path.exists():
-            file_path = alt_path
+        # Default logic: try primary output file
+        # Usually checking extension of task.output_file could work, 
+        # but better relies on what task.set_output stored as primary keys "3mf" or "stl".
+        # We can try to guess from task.output_file extension if available.
+        if task.output_file:
+            ext = Path(task.output_file).suffix.lstrip(".").lower()
+            target_key = ext
         else:
-            raise HTTPException(
-                status_code=404, 
-                detail=f"File not found: {selected_path} (also tried: {alt_path})"
-            )
+             target_key = "3mf" # Fallback
 
-    # content-type залежно від розширення
+    # 2. Перевіряємо локальний шлях
+    local_path: Optional[str] = getattr(task, "output_files", {}).get(target_key)
+    if not local_path and not part:
+        # If no specific key found via get(), maybe task.output_file is directly what we want?
+        local_path = task.output_file
+
+    file_exists_locally = False
+    if local_path:
+        # Check absolute or relative to OUTPUT_DIR
+        fp = Path(local_path)
+        if fp.exists():
+            file_exists_locally = True
+        else:
+            alt = OUTPUT_DIR / fp.name
+            if alt.exists():
+                local_path = str(alt)
+                file_exists_locally = True
+
+    # 3. Якщо локально немає — перевіряємо Firebase
+    from fastapi.responses import RedirectResponse
+    
+    if not file_exists_locally:
+        print(f"[INFO] Local file for {target_key} missing. Checking Firebase...")
+        firebase_url = getattr(task, "firebase_outputs", {}).get(target_key)
+        
+        # Якщо це основний файл, може бути в task.firebase_url
+        if not firebase_url and (not part) and task.firebase_url:
+             # Basic heuristic: if we requested same format as primary file
+             # But task.firebase_url usually points to the main file.
+             firebase_url = task.firebase_url
+
+        if firebase_url:
+            print(f"[INFO] Redirecting to Firebase: {firebase_url}")
+            return RedirectResponse(url=firebase_url)
+        else:
+             # Якщо це POI і його немає ніде - 404
+             if part == "poi":
+                 print(f"[INFO] POI part not available anywhere (expected), returning 404")
+             
+             print(f"[WARN] File not found locally AND not in Firebase: key={target_key}")
+             raise HTTPException(status_code=404, detail=f"File not found (local or remote): {target_key}")
+
+    # 4. Якщо файл є локально — віддаємо (як було)
+    file_path = Path(local_path)
     ext = file_path.suffix.lower()
     if ext == ".3mf":
         media_type = "model/3mf"
@@ -412,15 +438,11 @@ async def download_model(
     else:
         media_type = "application/octet-stream"
 
-    print(f"[DEBUG] Serving file: {file_path.name}, Size: {file_path.stat().st_size} bytes, Type: {media_type}")
-
-    from fastapi.responses import Response
+    print(f"[DEBUG] Serving LOCAL file: {file_path.name}, Size: {file_path.stat().st_size} bytes")
     
-    # Debug: Read file fully into memory to ensure it's accessible and sent completely
+    from fastapi.responses import Response
     with open(file_path, "rb") as f:
         file_content = f.read()
-    
-    print(f"[DEBUG] Read {len(file_content)} bytes into memory. Sending Response...")
     
     return Response(
         content=file_content,
@@ -2091,8 +2113,10 @@ def generate_model_task(
               f"parks={'OK' if parks_mesh else 'None'}")
         
         # Експортуємо основну модель
-        preserve_z = bool(getattr(request, "elevation_ref_m", None) is not None)
-        preserve_xy = bool(getattr(request, "preserve_global_xy", False))
+        # ВАЖЛИВО: Для експорту файлу (3MF/STL) ми ЗАВЖДИ центруємо модель (preserve_xy=False, preserve_z=False)
+        # Навіть якщо користувач вибрав "Preserve Global Coordinates" (для генерації), фінальний файл має відкриватися в слайсері по центру.
+        # Геометрія стиків (країв) вже сформована правильно завдяки глобальним координатам під час генерації.
+        # Фізичне зшивання (друк) не залежить від координат файлу, а цифрове зшивання краще робити через окремий endpoint.
         parts_from_main = export_scene(
             terrain_mesh=terrain_mesh,
             road_mesh=road_mesh,
@@ -2109,8 +2133,8 @@ def generate_model_task(
             add_flat_base=(terrain_mesh is None),
             base_thickness_mm=float(request.terrain_base_thickness_mm),
             reference_xy_m=reference_xy_m,
-            preserve_z=preserve_z,
-            preserve_xy=preserve_xy,
+            preserve_z=False, # FORCED CENTER
+            preserve_xy=False, # FORCED CENTER
         )
         
         # Якщо це STL і є окремі частини, зберігаємо їх
@@ -2136,8 +2160,8 @@ def generate_model_task(
                 add_flat_base=(terrain_mesh is None),
                 base_thickness_mm=float(request.terrain_base_thickness_mm),
                 reference_xy_m=reference_xy_m,
-                preserve_z=preserve_z,
-                preserve_xy=preserve_xy,
+                preserve_z=False,
+                preserve_xy=False,
             )
 
         # Кольорове прев'ю: експортуємо STL частини (base/roads/buildings/water) з однаковими трансформаціями
@@ -2172,8 +2196,8 @@ def generate_model_task(
                     base_thickness_mm=float(request.terrain_base_thickness_mm),
                     rotate_to_ground=False,
                     reference_xy_m=reference_xy_m,
-                    preserve_z=preserve_z,
-                    preserve_xy=preserve_xy,
+                    preserve_z=False,
+                    preserve_xy=False,
                 )
                 # Зберігаємо в output_files
                 for part_name, path in parts.items():

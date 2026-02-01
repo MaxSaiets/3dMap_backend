@@ -37,8 +37,8 @@ def fetch_extras(
         from services.preloaded_data import is_loaded, get_extras_for_bbox
         if is_loaded():
             print("[extras_loader] Використовую preloaded дані")
-            green, pois = get_extras_for_bbox(north, south, east, west)
-            return green, pois
+            green, _ = get_extras_for_bbox(north, south, east, west)
+            return green
     except Exception as e:
         print(f"[WARN] Помилка використання preloaded даних для extras: {e}, використовуємо звичайний режим")
     
@@ -57,11 +57,11 @@ def fetch_extras(
     if source in ("pbf", "geofabrik", "local"):
         from services.pbf_loader import fetch_extras_from_pbf
 
-        green, pois = fetch_extras_from_pbf(north, south, east, west)
+        green, _ = fetch_extras_from_pbf(north, south, east, west)
         # Кеш вимкнено: не зберігаємо результати
         # if ttl_s > 0:
         #     _EXTRAS_CACHE[k] = (now, green, pois)  # DISABLED
-        return green, pois
+        return green
 
     bbox = (north, south, east, west)
 
@@ -92,7 +92,10 @@ def fetch_extras(
             gdf_green = gdf_green[gdf_green.geometry.notna()]
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", DeprecationWarning)
-                gdf_green = ox.project_gdf(gdf_green)
+                try:
+                    gdf_green = ox.project_gdf(gdf_green)
+                except AttributeError:
+                    gdf_green = ox.projection.project_gdf(gdf_green)
             # Keep polygons only
             gdf_green = gdf_green[gdf_green.geom_type.isin(["Polygon", "MultiPolygon"])]
     except Exception:

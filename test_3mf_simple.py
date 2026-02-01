@@ -16,9 +16,10 @@ def test_3mf_export():
     mesh1 = trimesh.creation.box(extents=[10, 10, 10])
     mesh1.visual.face_colors = [255, 0, 0, 255]
     
-    # Create simple sphere
+    # Create simple sphere at LARGE OFFSET
     mesh2 = trimesh.creation.icosphere(radius=5)
-    mesh2.apply_translation([15, 0, 0])
+    # Simulate large offset (e.g. 500 units) to check centering
+    mesh2.apply_translation([500.0, 500.0, 0.0])
     mesh2.visual.face_colors = [0, 255, 0, 255]
     
     items = [
