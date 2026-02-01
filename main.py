@@ -14,6 +14,7 @@ import uuid
 from pathlib import Path
 import trimesh
 import gc
+import geopandas as gpd
 
 
 # Придушення deprecation warnings від pandas/geopandas
