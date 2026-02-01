@@ -1301,7 +1301,6 @@ def generate_model_task(
             if hasattr(G_roads, 'edges'):
                 num_roads = len(G_roads.edges)
             else:
-                import geopandas as gpd
                 if isinstance(G_roads, gpd.GeoDataFrame) and not G_roads.empty:
                     num_roads = len(G_roads)
         print(f"[DEBUG] Завантажено: {num_buildings} будівель, {num_water} вод, {num_roads} доріг")
