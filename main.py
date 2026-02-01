@@ -20,6 +20,15 @@ import gc
 warnings.filterwarnings('ignore', category=DeprecationWarning, module='pandas')
 warnings.filterwarnings('ignore', category=DeprecationWarning, module='geopandas')
 
+import osmnx as ox
+# Configure OSMnx to allow larger query areas without warning/subdivision
+# Default is 50km*50km (2.5e9). Warning says area is 1468x max? That's huge.
+# Let's set it to 10x default to reduce subdivision.
+ox.settings.max_query_area_size = 2_500_000_000 * 10 
+ox.settings.use_cache = True
+ox.settings.log_console = False # Reduce noise
+
+
 from services.data_loader import fetch_city_data
 from services.road_processor import process_roads, build_road_polygons
 from services.terrain_generator import create_terrain_mesh
