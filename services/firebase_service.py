@@ -18,18 +18,27 @@ class FirebaseService:
             return
 
         cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH", "serviceAccountKey.json")
+        cred_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
         bucket_name = os.getenv("FIREBASE_STORAGE_BUCKET")
 
         if not bucket_name:
             print("[WARN] FIREBASE_STORAGE_BUCKET not set. Firebase upload disabled.")
             return
         
-        if not os.path.exists(cred_path):
-             print(f"[WARN] Firebase credentials not found at {cred_path}. Firebase upload disabled.")
-             return
-
         try:
-            cred = credentials.Certificate(cred_path)
+            cred = None
+            if cred_json:
+                import json
+                print("[INFO] Loading Firebase credentials from environment variable...")
+                cred_info = json.loads(cred_json)
+                cred = credentials.Certificate(cred_info)
+            elif os.path.exists(cred_path):
+                 print(f"[INFO] Loading Firebase credentials from file: {cred_path}")
+                 cred = credentials.Certificate(cred_path)
+            else:
+                 print(f"[WARN] Firebase credentials not found (checked env var and {cred_path}). Upload disabled.")
+                 return
+
             # Check if likely already initialized
             if not firebase_admin._apps:
                 firebase_admin.initialize_app(cred, {
