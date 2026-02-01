@@ -83,7 +83,11 @@ def fetch_extras(
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
-            gdf_green = ox.features_from_bbox(*bbox, tags=tags_green)
+            # Safe call supporting both OSMnx v1 (positional) and v2 (bbox kwarg)
+            try:
+                gdf_green = ox.features_from_bbox(bbox=bbox, tags=tags_green)
+            except TypeError:
+                gdf_green = ox.features_from_bbox(bbox[0], bbox[1], bbox[2], bbox[3], tags=tags_green)
         if not gdf_green.empty:
             gdf_green = gdf_green[gdf_green.geometry.notna()]
             with warnings.catch_warnings():

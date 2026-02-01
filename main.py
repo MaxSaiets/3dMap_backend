@@ -22,9 +22,8 @@ warnings.filterwarnings('ignore', category=DeprecationWarning, module='geopandas
 
 import osmnx as ox
 # Configure OSMnx to allow larger query areas without warning/subdivision
-# Default is 50km*50km (2.5e9). Warning says area is 1468x max? That's huge.
-# Let's set it to 10x default to reduce subdivision.
-ox.settings.max_query_area_size = 2_500_000_000 * 10 
+# Default is 50km*50km (2.5e9). Set to effectively infinite to prevent subdivision.
+ox.settings.max_query_area_size = 1e50
 ox.settings.use_cache = True
 ox.settings.log_console = False # Reduce noise
 
