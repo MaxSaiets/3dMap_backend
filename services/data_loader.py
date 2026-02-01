@@ -544,6 +544,9 @@ def fetch_city_data(
                     # OSMnx v2.0+
                     G = ox.projection.project_graph(G)
             return G
+        except InsufficientResponseError:
+            print("[WARN] Дороги не знайдено (InsufficientResposeError)")
+            return None
         except Exception as e:
             print(f"[ERROR] Помилка завантаження доріг: {e}")
             import traceback
